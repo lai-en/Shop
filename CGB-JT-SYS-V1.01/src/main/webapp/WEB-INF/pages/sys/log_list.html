@@ -1,0 +1,183 @@
+<div class="row">
+	<div class="col-xs-12">
+		<div class="box">
+			<div class="box-header">
+				<h3 class="box-title">用户管理</h3>
+
+				<div class="box-tools">
+					<div class="input-group input-group-sm" style="width: 350px;">
+						<input type="text" name="table_search" id="searchNameId"
+							class="form-control pull-right" placeholder="用户名">
+
+						<div class="input-group-btn">
+							<button type="button" class="btn btn-default btn-search">
+								<i class="fa fa-search"></i>
+							</button>
+							<!-- <button type="button" class="btn btn-default btn-add">添加</button>
+							<button type="button" class="btn btn-default btn-update">修改</button> -->
+							<button type="button" class="btn btn-default btn-del">删除</button>
+						</div>
+					</div>
+				</div>
+			</div>
+			<!-- /.box-header -->
+			<div class="box-body table-responsive no-padding">
+				<table class="table table-hover">
+					<thead>
+						<tr>
+							<th><input type="checkbox" id="checkAllId"><label for="checkAllId">全选</label></th>
+							<th>用户名</th>
+							<th>操作</th>
+							<th>请求方法</th>
+							<th>请求参数</th>
+							<th>IP地址</th>
+							<th>执行时间</th>
+						</tr>
+					</thead>
+					<tbody id="tbodyId"></tbody>
+				</table>
+			</div>
+			<div id="pageId" class="box-footer clearfix"></div>
+			<!-- /.box-body -->
+		</div>
+		<!-- /.box -->
+	</div>
+</div>
+<script type="text/javascript">
+	$(function() {
+		//将page页面中的元素加载到当前页面中。
+		$("#pageId").load("doPageUI.do",function(){
+			//初始化页面数据。
+			doGetObjects();
+		});
+		$(".input-group-btn").on("click", ".btn-search", doQueryObjects);
+		$(".input-group-btn").on("click", ".btn-del", doDeleteObjedts);
+		$("thead").on("change", "#checkAllId", doChangeTBodyCheckBoxState);
+		$("#tbodyId").on("change", ".cItem", doChangeTHeadCheckBoxState);
+	})
+	
+	/* 如果点击了单条数据的选择按钮会触发该方法，该方法用来控制单挑数据对全选按钮的影响 */
+	function doChangeTHeadCheckBoxState(){
+		var flag = true;
+		$("#tbodyId input[type='checkbox']").each(function(){
+			//只要有一个没有被选中则flag为false。
+			flag = flag && $(this).prop("checked");
+		});
+		$("#checkAllId").prop("checked", flag);
+	}
+
+	/* 点击全选按钮触发的方法 */
+	function doChangeTBodyCheckBoxState(){
+		var state = $(this).prop("checked");
+		$("#tbodyId input[type='checkbox']").prop("checked",state);
+	}
+	
+	/* 用于返回被选中记录id的方法。 */
+	function doGetCheckedIds(){
+		var array=[];
+		$("#tbodyId input[type='checkbox']").each(function(){
+			if($(this).prop("checked")){
+				array.push($(this).val());
+			}
+		});
+		return array;
+	}
+	
+	/* 用于删除记录的方法 */
+	function doDeleteObjedts(){
+		//获取被选中的记录
+		var ids = doGetCheckedIds();
+		if(ids.length == 0){
+			alert("请先选择要删除的数据");
+			return;
+		}
+		var params = {"ids":ids.toString()};
+		var url = "log/doDeleteObjects.do";
+		$.post(url,params,function(result){
+			if(result.state == 1){
+				alert(result.message);
+				//删除页面之后重新刷新页面。
+				var pageCurrent = $("#pageId").data("pageCurrent");
+				var pageCount = $("#pageId").data("pageCount");
+				/* 如果当前页是最后一页，并且全选按钮处于被选中状态，那么将认为当前页已经没有数据，将当前页减一。*/
+				if(pageCurrent == pageCount){
+					if($("#checkAllId").prop("checked")){
+						$("#pageId").data("pageCurrent", --pageCurrent);
+					}
+				}
+				doQueryObjects();
+			}else{
+				alert(result.message);
+			}
+		},type="json")
+	}
+	
+	/* 点击查询按钮会触发该方法*/
+	function doQueryObjects(){
+		doGetObjects();
+	}
+
+	/* 初始化页面的数据，主要负责根据页数向服务器发送请求。 */
+	function doGetObjects() {
+		$("#checkAllId").prop("checked", false);
+		var logUrl = "log/doFindPageObjects.do"
+		//获取当前是那一页。
+		var	pageCurrent = $("#pageId").data("pageCurrent");
+		if(!pageCurrent){
+			pageCurrent = 1;
+		}
+		var params = {"pageCurrent":pageCurrent};
+		
+		var name = $("#searchNameId").val();
+		if(name) params.name=name;
+		$.ajax({
+			url : logUrl,
+			data : params,
+			dataType : "json",
+			success : function(result) {
+				doHandleResponseResult(result);
+			}
+		})
+	}
+
+	/* 负责处理响应数据 */
+	function doHandleResponseResult(result) {
+		if (result.state == 1) {
+			//初始化表格数据
+			doSetTableBodyRows(result.data.records);
+			//初始化底部按钮数据
+			doSetPagination(result.data);
+		} else {
+			alert(result.message);
+		}
+	}
+
+	/* 负责初始化表格数据。 */
+	function doSetTableBodyRows(records) {
+		var tBody = $("#tbodyId");
+		tBody.empty();
+		for(var i in records){
+			var tr = $("<tr></tr>");
+			var tds = doCreateTds(records[i]);
+			tr.append(tds);
+			tBody.append(tr);
+		}
+	}
+	
+	/* 负责初始化一行数据。 */
+	function doCreateTds(records){
+		var tds = 
+			"<td><input type='checkbox' name='cItem' class='cItem' value='"+records.id+"'></td>" +
+			"<td>" + records.username + "</td>" +
+			"<td>" + records.operation + "</td>" +
+			"<td>" + records.method + "</td>" +
+			"<td>" + records.params + "</td>" +
+			"<td>" + records.iP + "</td>" +
+			"<td>" + records.createdTime + "</td>";
+		return tds;
+	}
+</script>
+
+
+
+
